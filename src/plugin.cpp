@@ -17,14 +17,15 @@ namespace
 
 	std::atomic<std::uint32_t> g_generation{ 0 };
 
-	REL::Relocation<RE::NiNode**> g_waterLOD{ REL::RelocationID(516171, 402322) };
-
 	[[nodiscard]] RE::NiNode* ResolveWaterLODRoot()
 	{
 		if (const auto tes = RE::TES::GetSingleton(); tes && tes->objLODWaterRoot) {
 			return tes->objLODWaterRoot;
 		}
-		if (const auto p = g_waterLOD.get(); p && *p) {
+		// Function-local: a global RelocationID can init REL::Module during CRT
+		// startup, then Module's debug constructor zeros _base (not constinit).
+		static REL::Relocation<RE::NiNode**> waterLOD{ REL::RelocationID(516171, 402322) };
+		if (const auto p = waterLOD.get(); p && *p) {
 			return *p;
 		}
 		return nullptr;
@@ -258,6 +259,10 @@ namespace
 
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
+	// Debug CRT: Module::_instance is not constinit. If any Relocation resolved
+	// during static init, get() marks the singleton initialized and then the
+	// constructor zeros _base — later ID lookups jump to a raw offset (crash).
+	REL::Module::reset();
 	SKSE::Init(a_skse);
 
 	const auto* plugin = SKSE::PluginVersionData::GetSingleton();

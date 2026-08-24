@@ -14,6 +14,7 @@ SKSE_EXPORT constinit SKSE::PluginVersionData SKSEPlugin_Version = []() noexcept
 	v.UsesAddressLibrary();
 	v.UsesUpdatedStructs();
 	v.CompatibleVersions({
+		SKSE::RUNTIME_SSE_1_5_97,
 		SKSE::RUNTIME_SSE_1_6_1170,
 		SKSE::RUNTIME_SSE_1_7_99,
 	});
