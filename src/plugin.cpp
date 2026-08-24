@@ -129,7 +129,7 @@ namespace
 
 		auto& children = node->GetChildren();
 		const auto count = children.capacity();
-		for (std::uint32_t i = 0; i < count; ++i) {
+		for (std::uint16_t i = 0; i < count; ++i) {
 			if (const auto& child = children[i]; child) {
 				WalkAndCull(child.get(), a_depth + 1, a_cells, a_culled);
 			}
@@ -165,7 +165,7 @@ namespace
 		std::uint32_t culled = 0;
 		auto& children = root->GetChildren();
 		const auto count = children.capacity();
-		for (std::uint32_t i = 0; i < count; ++i) {
+		for (std::uint16_t i = 0; i < count; ++i) {
 			if (const auto& child = children[i]; child) {
 				WalkAndCull(child.get(), 1, attached, culled);
 			}
@@ -260,8 +260,8 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
 	SKSE::Init(a_skse);
 
-	const auto* plugin = SKSE::PluginDeclaration::GetSingleton();
-	SKSE::log::info("{} v{} loaded", plugin->GetName(), plugin->GetVersion().string());
+	const auto* plugin = SKSE::PluginVersionData::GetSingleton();
+	SKSE::log::info("{} v{} loaded", plugin->GetPluginName(), plugin->GetPluginVersion().string());
 
 	const auto messaging = SKSE::GetMessagingInterface();
 	if (!messaging || !messaging->RegisterListener(OnSKSEMessage)) {

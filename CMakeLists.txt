@@ -17,6 +17,13 @@ add_commonlibsse_plugin(
     SOURCES
         src/plugin.cpp)
 
+# SKSEPlugin_Version / SKSEPlugin_Query are declared in src/PCH.h as
+# PluginVersionData so AE 1.7.99 gets AddressLibraryV5. The generated
+# SKSEPluginInfo uses PluginDeclaration, which overwrites that flag.
+set_source_files_properties(
+    "${CMAKE_CURRENT_BINARY_DIR}/__${PROJECT_NAME}Plugin.cpp"
+    PROPERTIES HEADER_FILE_ONLY TRUE)
+
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/PCH.h)
