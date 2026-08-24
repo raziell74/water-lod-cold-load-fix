@@ -1,0 +1,12 @@
+/build/
+/out/
+/.vs/
+/.idea/
+/CMakeUserPresets.json
+/vcpkg_installed/
+/_clib_src/
+*.user
+*.suo
+*.sdf
+*.db
+CMakeCache.txt
