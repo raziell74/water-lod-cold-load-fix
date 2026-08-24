@@ -247,7 +247,8 @@ namespace
 			g_generation.fetch_add(1, std::memory_order_acq_rel);
 			break;
 		case SKSE::MessagingInterface::kPostLoadGame:
-			if (a_msg->data && *static_cast<bool*>(a_msg->data)) {
+			// SKSE dispatches (void*)result, not a bool*. Success is pointer value 1.
+			if (a_msg->data) {
 				ArmDelay();
 			}
 			break;
