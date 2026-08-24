@@ -59,3 +59,19 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInf
         VERBATIM
     )
 endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(RELEASE_FOLDER "${CMAKE_SOURCE_DIR}/releases/${PROJECT_NAME} v${PROJECT_VERSION}")
+    add_custom_command(
+        TARGET "${PROJECT_NAME}"
+        POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_PDB_FILE:${PROJECT_NAME}>"
+            "${DLL_FOLDER}/$<TARGET_PDB_FILE_NAME:${PROJECT_NAME}>"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${RELEASE_FOLDER}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${OUTPUT_FOLDER}"
+            "${RELEASE_FOLDER}"
+        VERBATIM
+    )
+endif()
