@@ -72,6 +72,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
             "${OUTPUT_FOLDER}"
             "${RELEASE_STAGING}"
         COMMAND "${CMAKE_COMMAND}" -E rm -f "${RELEASE_STAGING}/meta.ini"
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${RELEASE_STAGING}/.git"
+        COMMAND "${CMAKE_COMMAND}" -E rm -f "${RELEASE_STAGING}/.gitignore"
         VERBATIM
     )
     add_custom_command(
