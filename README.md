@@ -1,60 +1,49 @@
-# Water LOD Cold Load Fix
+<p align="center">
+  <img src="https://raw.githubusercontent.com/raziell74/water-lod-cold-load-fix/main/assets/Water%20LOD%20Fix%20Icon.png" alt="Water LOD Fix" width="256">
+</p>
 
-An SKSE plugin that hides leftover distant water LOD after a cold load.
+**Water LOD Cold Load Fix** is an SKSE plugin that hides leftover distant water LOD after a cold load. Load a save from the main menu while standing outdoors near a river, lake, or coast and you can see a second, low-detail water plane sitting on top of the real water. That's leftover **water LOD**: the distant water tiles the engine uses when those cells aren't loaded. On a cold boot they don't always get cleaned up when the full cells attach.
 
-## The problem
+Hot-loading (loading a save while already in-game) usually doesn't show it, which is why "load a clean indoor save first" became a common workaround. This plugin waits until you're actually in the world, then walks the water LOD scene graph and hides leftover tiles that overlap the cells currently attached around you. Distant water beyond the loaded grid is left alone. Near water is left alone. No ESP, no MCM, no settings. Using this should significantly cut down on the amount of time you spend wondering if your water overhaul is broken and get back to what really matters... WADING INTO EVERY RIVER YOU SEE.
 
-Load a save from the main menu while standing outdoors near a river, lake, or coast. For a while — and sometimes until you leave the area — you can see a second, low-detail water plane sitting on top of the real water.
+## Features
 
-That's leftover **water LOD**: the distant water tiles the engine uses when those cells aren't loaded. On a cold boot they don't always get cleaned up when the full cells attach.
-
-Hot-loading (loading a save while already in-game) usually doesn't show it. That's why "load a clean indoor save first" became a common workaround.
-
-## What this does
-
-Nothing fancy. No ESP, no MCM, no settings.
-
-After you load a game, the plugin waits until you're actually in the world — main menu and loading screen closed, player 3D live, exterior cell. Then it walks the **water LOD** scene graph (not near water, not your character's 3D) and hides leftover LOD tiles that overlap the cells currently attached around you.
-
-Distant water beyond the loaded grid is left alone. Near water is left alone.
+- Hides leftover water LOD tiles after a cold load from the main menu.
+- Only touches water LOD that overlaps currently attached exterior cells.
+- Distant water beyond the loaded grid is left alone.
+- Near water is left alone. This plugin does not change how water looks.
+- No ESP, no MCM, no settings. Drop it in and forget about it.
+- One DLL covers SE 1.5.97, AE 1.6.1170, and AE 1.7.99 via Address Library.
 
 ## Requirements
 
-- Skyrim Special Edition or Anniversary Edition
 - [SKSE](https://skse.silverlock.org/)
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
 
-One DLL covers SE 1.5.97, AE 1.6.1170, and AE 1.7.99 via Address Library.
-
 ## Installation
 
-Drop `WaterLODCleanupFix.dll` into `Data/SKSE/Plugins/`, or install with Mod Organizer 2 / Vortex like any other SKSE plugin.
+Install using your favorite mod manager or manually extract the contents of the archive to your Skyrim Special Edition Data folder. Please also make sure you also have all of the required mods installed.
 
 Load order doesn't matter. There is no plugin file.
 
+## Uninstallation
+
+Uninstall using your favorite mod manager or manually delete the files from your Skyrim Special Edition Data folder.
+
 ## Compatibility
 
-- Water visual overhauls (ENB, Community Shaders, water mesh/texture mods): compatible. This plugin doesn't change how water looks.
-- Anything that doesn't yank the water LOD root out from under the engine should be fine.
-- VR is enabled in the CommonLibSSE-NG build, but this is aimed at SE/AE.
+**Water LOD Cold Load Fix** should be compatible with water visual overhauls, ENB, Community Shaders, and water mesh/texture mods. This plugin doesn't change how water looks, it only hides leftover LOD tiles the engine forgot to clean up.
 
-## Known limitations
+Anything that doesn't yank the water LOD root out from under the engine should be fine. No patches should be needed.
 
-- Only runs after a load, with an ~8 second delay (gives up after ~25 seconds if the world never becomes ready).
-- Interior loads are skipped.
-- Leftover tiles are hidden (`SetAppCulled`), not deleted, so the engine can still own them.
+The SKSE plugin was built using [CommonLibSSE NG](https://github.com/alandtse/CommonLibSSE-NG), it supports Skyrim SE, AE, GOG, and VR. This is aimed at SE/AE.
 
-## Building from source
+## Known Issues
 
-CMake 3.21+, MSVC, Ninja, and vcpkg. CommonLibSSE-NG is pulled from an overlay port (`cmake/ports/commonlibsse-ng`).
+The cleanup only runs after a load, with an ~8 second delay so the world has time to actually exist. It gives up after ~25 seconds if the world never becomes ready. Interior loads are skipped.
 
-```bat
-cmake --preset release
-cmake --build --preset release
-```
+Leftover tiles are hidden, not deleted, so the engine can still own them. If you still see stacked water after a cold load, wait a few seconds for the cleanup to fire before assuming something else is wrong.
 
-The debug preset works the same way (`--preset debug`). `CMakeLists.txt` copies the built DLL into a local MO2 mods folder; change `OUTPUT_FOLDER` if that path isn't yours.
+## Credits
 
-## License
-
-GPL-3.0-or-later, same as [CommonLibSSE-NG](https://github.com/alandtse/CommonLibSSE-NG).
+SKSE Source Code: [Water LOD Cold Load Fix](https://github.com/raziell74/water-lod-cold-load-fix) - Licensed under GPL-3.0-or-later, same as [CommonLibSSE-NG](https://github.com/alandtse/CommonLibSSE-NG).
