@@ -15,7 +15,10 @@ add_commonlibsse_plugin(
     VERSION ${PROJECT_VERSION}
     USE_ADDRESS_LIBRARY
     SOURCES
-        src/plugin.cpp)
+        src/plugin.cpp
+        src/WaterLOD.cpp
+        src/Events/Events.cpp
+        src/Hooks/Hooks.cpp)
 
 # SKSEPlugin_Version / SKSEPlugin_Query are declared in src/PCH.h as
 # PluginVersionData so AE 1.7.99 gets AddressLibraryV5. The generated
