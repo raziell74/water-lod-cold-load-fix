@@ -4,24 +4,84 @@
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cstdint>
-#include <unordered_set>
+#include <limits>
 #include <vector>
 
 namespace
 {
-	using Clock = std::chrono::steady_clock;
-
-	constexpr auto kLoadDelay = std::chrono::milliseconds(8000);
-	constexpr auto kGridDelay = std::chrono::milliseconds(400);
-	constexpr auto kGiveUp = std::chrono::seconds(25);
 	constexpr int kMaxDepth = 4;
 	constexpr float kCellSize = 4096.0f;
 
+	enum class SessionMode : std::uint8_t
+	{
+		kPending = 0,
+		kActive = 1,
+		kDisabled = 2
+	};
+
+	struct GridAABB
+	{
+		float minX{ 0.0f };
+		float minY{ 0.0f };
+		float maxX{ 0.0f };
+		float maxY{ 0.0f };
+		bool valid{ false };
+	};
+
 	std::atomic<std::uint32_t> g_generation{ 0 };
 	std::atomic<bool> g_holdGrid{ false };
+	std::atomic<bool> g_taskQueued{ false };
+	std::atomic<SessionMode> g_session{ SessionMode::kPending };
 	std::vector<RE::NiPointer<RE::NiAVObject>> g_hidden;
+
+	[[nodiscard]] bool IsDisabled()
+	{
+		return g_session.load(std::memory_order_acquire) == SessionMode::kDisabled;
+	}
+
+	void DisableForSession()
+	{
+		auto expected = SessionMode::kPending;
+		if (g_session.compare_exchange_strong(expected, SessionMode::kDisabled, std::memory_order_acq_rel)) {
+			SKSE::log::info("First save load was interior; disabling water LOD cleanup for this session");
+			g_generation.fetch_add(1, std::memory_order_acq_rel);
+			g_holdGrid.store(false, std::memory_order_release);
+			g_taskQueued.store(false, std::memory_order_release);
+		}
+	}
+
+	void ActivateForSession()
+	{
+		auto expected = SessionMode::kPending;
+		g_session.compare_exchange_strong(expected, SessionMode::kActive, std::memory_order_acq_rel);
+	}
+
+	// Decide from the player's cell after a save load. Pending with no cell yet stays pending.
+	[[nodiscard]] bool TryDecideFromPlayerCell()
+	{
+		const auto mode = g_session.load(std::memory_order_acquire);
+		if (mode == SessionMode::kDisabled) {
+			return false;
+		}
+		if (mode == SessionMode::kActive) {
+			return true;
+		}
+
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		const auto cell = player ? player->GetParentCell() : nullptr;
+		if (!cell) {
+			return true;
+		}
+
+		if (cell->IsInteriorCell()) {
+			DisableForSession();
+			return false;
+		}
+
+		ActivateForSession();
+		return !IsDisabled();
+	}
 
 	[[nodiscard]] RE::NiNode* ResolveWaterLODRoot()
 	{
@@ -55,27 +115,19 @@ namespace
 		return ui && ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
 	}
 
-	[[nodiscard]] bool CircleOverlapsCell(float a_x, float a_y, float a_radius, std::int32_t a_cellX, std::int32_t a_cellY)
+	[[nodiscard]] GridAABB CollectAttachedGridBounds()
 	{
-		const float minX = static_cast<float>(a_cellX) * kCellSize;
-		const float minY = static_cast<float>(a_cellY) * kCellSize;
-		const float maxX = minX + kCellSize;
-		const float maxY = minY + kCellSize;
-		const float closestX = std::clamp(a_x, minX, maxX);
-		const float closestY = std::clamp(a_y, minY, maxY);
-		const float dx = a_x - closestX;
-		const float dy = a_y - closestY;
-		return (dx * dx + dy * dy) <= (a_radius * a_radius);
-	}
-
-	[[nodiscard]] std::unordered_set<std::uint64_t> CollectAttachedExteriorCells()
-	{
-		std::unordered_set<std::uint64_t> cells;
+		GridAABB bounds;
 		const auto tes = RE::TES::GetSingleton();
 		const auto grid = tes ? tes->gridCells : nullptr;
 		if (!grid) {
-			return cells;
+			return bounds;
 		}
+
+		std::int32_t minCellX = std::numeric_limits<std::int32_t>::max();
+		std::int32_t minCellY = std::numeric_limits<std::int32_t>::max();
+		std::int32_t maxCellX = std::numeric_limits<std::int32_t>::min();
+		std::int32_t maxCellY = std::numeric_limits<std::int32_t>::min();
 
 		for (std::uint32_t x = 0; x < grid->length; ++x) {
 			for (std::uint32_t y = 0; y < grid->length; ++y) {
@@ -87,17 +139,28 @@ namespace
 				if (!coords) {
 					continue;
 				}
-				const auto key = (static_cast<std::uint64_t>(static_cast<std::uint32_t>(coords->cellX)) << 32) |
-				                 static_cast<std::uint32_t>(coords->cellY);
-				cells.insert(key);
+				minCellX = std::min(minCellX, coords->cellX);
+				minCellY = std::min(minCellY, coords->cellY);
+				maxCellX = std::max(maxCellX, coords->cellX);
+				maxCellY = std::max(maxCellY, coords->cellY);
 			}
 		}
-		return cells;
+
+		if (minCellX > maxCellX) {
+			return bounds;
+		}
+
+		bounds.minX = static_cast<float>(minCellX) * kCellSize;
+		bounds.minY = static_cast<float>(minCellY) * kCellSize;
+		bounds.maxX = static_cast<float>(maxCellX + 1) * kCellSize;
+		bounds.maxY = static_cast<float>(maxCellY + 1) * kCellSize;
+		bounds.valid = true;
+		return bounds;
 	}
 
-	[[nodiscard]] bool OverlapsAttachedGrid(RE::NiAVObject* a_object, const std::unordered_set<std::uint64_t>& a_cells)
+	[[nodiscard]] bool OverlapsAttachedGrid(RE::NiAVObject* a_object, const GridAABB& a_bounds)
 	{
-		if (!a_object || a_cells.empty()) {
+		if (!a_object || !a_bounds.valid) {
 			return false;
 		}
 
@@ -107,14 +170,11 @@ namespace
 			radius = kCellSize * 2.0f;
 		}
 
-		for (const auto key : a_cells) {
-			const auto cellX = static_cast<std::int32_t>(key >> 32);
-			const auto cellY = static_cast<std::int32_t>(key & 0xFFFFFFFFu);
-			if (CircleOverlapsCell(pos.x, pos.y, radius, cellX, cellY)) {
-				return true;
-			}
-		}
-		return false;
+		const float closestX = std::clamp(pos.x, a_bounds.minX, a_bounds.maxX);
+		const float closestY = std::clamp(pos.y, a_bounds.minY, a_bounds.maxY);
+		const float dx = pos.x - closestX;
+		const float dy = pos.y - closestY;
+		return (dx * dx + dy * dy) <= (radius * radius);
 	}
 
 	void RestoreHidden()
@@ -127,13 +187,13 @@ namespace
 		g_hidden.clear();
 	}
 
-	void WalkAndCull(RE::NiAVObject* a_object, int a_depth, const std::unordered_set<std::uint64_t>& a_cells, std::uint32_t& a_culled)
+	void WalkAndCull(RE::NiAVObject* a_object, int a_depth, const GridAABB& a_bounds, std::uint32_t& a_culled)
 	{
 		if (!a_object || a_depth > kMaxDepth) {
 			return;
 		}
 
-		if (a_depth >= 1 && OverlapsAttachedGrid(a_object, a_cells)) {
+		if (a_depth >= 1 && OverlapsAttachedGrid(a_object, a_bounds)) {
 			a_object->SetAppCulled(true);
 			g_hidden.emplace_back(a_object);
 			++a_culled;
@@ -146,10 +206,10 @@ namespace
 		}
 
 		auto& children = node->GetChildren();
-		const auto count = children.capacity();
+		const auto count = children.free_idx();
 		for (std::uint16_t i = 0; i < count; ++i) {
 			if (const auto& child = children[i]; child) {
-				WalkAndCull(child.get(), a_depth + 1, a_cells, a_culled);
+				WalkAndCull(child.get(), a_depth + 1, a_bounds, a_culled);
 			}
 		}
 	}
@@ -174,8 +234,8 @@ namespace
 			return;
 		}
 
-		const auto attached = CollectAttachedExteriorCells();
-		if (attached.empty()) {
+		const auto attached = CollectAttachedGridBounds();
+		if (!attached.valid) {
 			SKSE::log::info("No attached exterior cells; skip water LOD cull");
 			return;
 		}
@@ -185,7 +245,8 @@ namespace
 
 		std::uint32_t culled = 0;
 		auto& children = root->GetChildren();
-		const auto count = children.capacity();
+		const auto count = children.free_idx();
+		g_hidden.reserve(count);
 		for (std::uint16_t i = 0; i < count; ++i) {
 			if (const auto& child = children[i]; child) {
 				WalkAndCull(child.get(), 1, attached, culled);
@@ -195,33 +256,40 @@ namespace
 		SKSE::log::info("Water LOD sync: culled {}, restored {}", culled, restored);
 	}
 
-	void Pump(std::uint32_t a_gen, Clock::time_point a_armed, Clock::duration a_delay);
-
-	void Pump(std::uint32_t a_gen, Clock::time_point a_armed, Clock::duration a_delay)
+	void RequestSync()
 	{
-		const auto tasks = SKSE::GetTaskInterface();
-		if (!tasks) {
+		if (IsDisabled()) {
+			return;
+		}
+		if (g_taskQueued.exchange(true, std::memory_order_acq_rel)) {
 			return;
 		}
 
-		tasks->AddTask([a_gen, a_armed, a_delay]() {
-			if (a_gen != g_generation.load(std::memory_order_acquire)) {
+		const auto tasks = SKSE::GetTaskInterface();
+		if (!tasks) {
+			g_taskQueued.store(false, std::memory_order_release);
+			return;
+		}
+
+		const auto gen = g_generation.load(std::memory_order_acquire);
+		tasks->AddTask([gen]() {
+			g_taskQueued.store(false, std::memory_order_release);
+			if (gen != g_generation.load(std::memory_order_acquire) || IsDisabled()) {
 				return;
 			}
 			if (IsMainMenuOpen()) {
 				g_holdGrid.store(false, std::memory_order_release);
 				return;
 			}
-
-			const auto now = Clock::now();
-			if (now - a_armed > kGiveUp) {
-				SKSE::log::warn("Water LOD cull gave up after {} seconds", kGiveUp.count());
-				g_holdGrid.store(false, std::memory_order_release);
+			if (!TryDecideFromPlayerCell()) {
 				return;
 			}
-
-			if (now - a_armed < a_delay || !IsWorldReady()) {
-				Pump(a_gen, a_armed, a_delay);
+			if (!IsWorldReady()) {
+				const auto player = RE::PlayerCharacter::GetSingleton();
+				const auto cell = player ? player->GetParentCell() : nullptr;
+				if (cell && cell->IsInteriorCell()) {
+					g_holdGrid.store(false, std::memory_order_release);
+				}
 				return;
 			}
 
@@ -229,39 +297,36 @@ namespace
 			g_holdGrid.store(false, std::memory_order_release);
 		});
 	}
-
-	void Arm(Clock::duration a_delay)
-	{
-		const auto gen = g_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
-		SKSE::log::debug(
-			"Arming water LOD cull in {} ms (generation {})",
-			std::chrono::duration_cast<std::chrono::milliseconds>(a_delay).count(),
-			gen);
-		Pump(gen, Clock::now(), a_delay);
-	}
 }
 
 namespace WaterLOD
 {
 	void ArmLoad()
 	{
+		if (IsDisabled() || !TryDecideFromPlayerCell()) {
+			return;
+		}
 		g_holdGrid.store(true, std::memory_order_release);
-		SKSE::log::info("Arming water LOD cull in {} seconds after load", kLoadDelay.count() / 1000);
-		Arm(kLoadDelay);
+		SKSE::log::info("Requesting water LOD cull after load");
+		RequestSync();
 	}
 
 	void ArmGrid()
 	{
-		if (g_holdGrid.load(std::memory_order_acquire)) {
+		if (IsDisabled() || g_holdGrid.load(std::memory_order_acquire)) {
 			return;
 		}
-		Arm(kGridDelay);
+		RequestSync();
 	}
 
 	void OnPreLoadGame()
 	{
+		if (IsDisabled()) {
+			return;
+		}
 		g_holdGrid.store(true, std::memory_order_release);
 		g_generation.fetch_add(1, std::memory_order_acq_rel);
+		g_taskQueued.store(false, std::memory_order_release);
 		g_hidden.clear();
 	}
 

@@ -40,9 +40,9 @@ The SKSE plugin was built using [CommonLibSSE NG](https://github.com/alandtse/Co
 
 ## Known Issues
 
-The cleanup only runs after a load, with an ~8 second delay so the world has time to actually exist. It gives up after ~25 seconds if the world never becomes ready. Interior loads are skipped.
+The cleanup runs after the loading menu closes, once you're in an attached exterior cell. Interior-first sessions disable the plugin for the rest of that play session, same as loading a clean indoor save first.
 
-Leftover tiles are hidden, not deleted, so the engine can still own them. If you still see stacked water after a cold load, wait a few seconds for the cleanup to fire before assuming something else is wrong.
+Leftover tiles are hidden, not deleted, so the engine can still own them. If you still see stacked water after a cold load, give it a moment after the world appears before assuming something else is wrong.
 
 ## Credits
 
