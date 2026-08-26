@@ -61,11 +61,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInf
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(RELEASE_STAGING "${CMAKE_SOURCE_DIR}/releases/${PROJECT_NAME} v${PROJECT_VERSION}")
-    set(RELEASE_ZIP "${CMAKE_SOURCE_DIR}/releases/${PROJECT_NAME} v${PROJECT_VERSION}.zip")
+    set(RELEASES_DIR "${CMAKE_SOURCE_DIR}/releases")
+    set(RELEASE_STAGING "${RELEASES_DIR}/${PROJECT_NAME} v${PROJECT_VERSION}")
+    set(RELEASE_ZIP "${RELEASES_DIR}/${PROJECT_NAME} v${PROJECT_VERSION}.zip")
     add_custom_command(
         TARGET "${PROJECT_NAME}"
         POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${RELEASES_DIR}"
         COMMAND "${CMAKE_COMMAND}" -E rm -rf "${RELEASE_STAGING}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${RELEASE_STAGING}"
         COMMAND "${CMAKE_COMMAND}" -E copy_directory
